@@ -120,11 +120,10 @@ namespace Azure { namespace Core { namespace Http {
      * @remark The default is the built-in system specific path. More about this option:
      * https://curl.se/libcurl/c/CURLOPT_CAINFO.html
      *
-     * @remark This option is known to only work on Linux and might throw if set on other platforms.
-     *
      */
     std::string CAInfo;
 
+#if defined(AZ_PLATFORM_LINUX)
     /**
      * @brief Path to a directory which holds PEM encoded file, containing the certificate
      * authorities sent to libcurl handle directly.
@@ -136,6 +135,7 @@ namespace Azure { namespace Core { namespace Http {
      *
      */
     std::string CAPath;
+#endif
 
     /**
      * @brief All HTTP requests will keep the connection channel open to the service.

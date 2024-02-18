@@ -35,8 +35,6 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
 namespace Azure { namespace Core { namespace Amqp { namespace _detail {
   using UniqueAmqpConnection = UniqueHandle<CONNECTION_INSTANCE_TAG>;
 
-  std::ostream& operator<<(std::ostream& os, CONNECTION_STATE state);
-
   class ClaimsBasedSecurity;
 
   class ConnectionFactory final {
@@ -60,8 +58,7 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
     ConnectionImpl(
         std::shared_ptr<Network::_detail::TransportImpl> transport,
         _internal::ConnectionOptions const& options,
-        _internal::ConnectionEvents* eventHandler,
-        _internal::ConnectionEndpointEvents* endpointEvents);
+        _internal::ConnectionEvents* eventHandler);
 
     ConnectionImpl(
         std::string const& hostName,
@@ -93,6 +90,8 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
 
     void Open();
     void Listen();
+
+    void Close();
 
     void Close(
         std::string const& condition = {},
@@ -145,7 +144,6 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
     Azure::Core::Amqp::Common::_internal::AsyncOperationQueue<std::unique_ptr<_internal::Session>>
         m_newSessionQueue;
     _internal::ConnectionEvents* m_eventHandler{};
-    _internal::ConnectionEndpointEvents* m_endpointEvents{};
     _internal::ConnectionState m_connectionState = _internal::ConnectionState::Start;
 
     LockType m_amqpMutex;

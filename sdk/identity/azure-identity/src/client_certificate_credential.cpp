@@ -20,11 +20,7 @@
 #include <vector>
 
 #if defined(AZ_PLATFORM_WINDOWS)
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
 #include <Windows.h>
-
-#include <wincrypt.h>
 
 #if !defined(WINAPI_PARTITION_DESKTOP) || WINAPI_PARTITION_DESKTOP // not UWP
 #pragma warning(push)
@@ -507,7 +503,7 @@ AccessToken ClientCertificateCredential::GetToken(
   // call it later. Therefore, any capture made here will outlive the possible time frame when the
   // lambda might get called.
   return m_tokenCache.GetToken(scopesStr, tenantId, tokenRequestContext.MinimumExpiration, [&]() {
-    return m_tokenCredentialImpl->GetToken(context, false, [&]() {
+    return m_tokenCredentialImpl->GetToken(context, [&]() {
       auto body = m_requestBody;
       if (!scopesStr.empty())
       {

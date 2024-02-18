@@ -160,7 +160,7 @@ namespace Azure { namespace Messaging { namespace EventHubs {
         auto client = m_nextPartitionClients.TryRemove();
         if (client)
         {
-          client->Close(context);
+          client->Close();
         }
         else
         {
@@ -293,8 +293,7 @@ namespace Azure { namespace Messaging { namespace EventHubs {
     void AddPartitionClient(
         Models::Ownership const& ownership,
         std::map<std::string, Models::Checkpoint>& checkpoints,
-        std::weak_ptr<ConsumersType> consumers,
-        Core::Context const& context);
+        std::weak_ptr<ConsumersType> consumers);
 
     void RunInternal(Core::Context const& context, bool manualRun);
 

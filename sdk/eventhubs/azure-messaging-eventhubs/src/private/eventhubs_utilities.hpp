@@ -10,7 +10,6 @@
 #include "azure/messaging/eventhubs/partition_client.hpp"
 #include "package_version.hpp"
 
-#include <azure/core/amqp/internal/connection.hpp>
 #include <azure/core/amqp/internal/management.hpp>
 #include <azure/core/amqp/internal/session.hpp>
 #include <azure/core/context.hpp>
@@ -84,33 +83,50 @@ namespace Azure { namespace Messaging { namespace EventHubs { namespace _detail 
     PartitionClientFactory() = delete;
   };
 
-  class EventHubsPropertiesClient {
-  public:
-    EventHubsPropertiesClient(
-        const Azure::Core::Amqp::_internal::Connection& connection,
-        std::string eventHubName)
-        : m_session{connection.CreateSession()}, m_eventHub{eventHubName} {};
+  class EventHubsUtilities {
 
-    ~EventHubsPropertiesClient()
+  public:
+    template <typename T> static void SetUserAgent(T& options, std::string const& applicationId)
     {
-      if (m_managementClientIsOpen)
-      {
-        m_managementClient->Close();
-      }
+      constexpr const char* packageName = "cpp-azure-messaging-eventhubs-cpp";
+
+      options.Properties.emplace("Product", +packageName);
+      options.Properties.emplace("Version", PackageVersion::ToString());
+#if defined(AZ_PLATFORM_WINDOWS)
+      options.Properties.emplace("Platform", "Windows");
+#elif defined(AZ_PLATFORM_LINUX)
+      options.Properties.emplace("Platform", "Linux");
+#elif defined(AZ_PLATFORM_MAC)
+      options.Properties.emplace("Platform", "Mac");
+#endif
+      options.Properties.emplace(
+          "User-Agent",
+          Azure::Core::Http::_detail::UserAgentGenerator::GenerateUserAgent(
+              packageName, PackageVersion::ToString(), applicationId));
     }
 
-    Models::EventHubProperties GetEventHubsProperties(
+    static Models::EventHubProperties GetEventHubsProperties(
+        Azure::Core::Amqp::_internal::Session const& session,
         std::string const& eventHubName,
         Core::Context const& context)
     {
-      EnsureManagementClient(context);
+
+      // Create a management client off the session.
+      // Eventhubs management APIs return a status code in the "status-code" application properties.
+      Azure::Core::Amqp::_internal::ManagementClientOptions managementClientOptions;
+      managementClientOptions.EnableTrace = EnableAmqpTrace;
+      managementClientOptions.ExpectedStatusCodeKeyName = "status-code";
+      Azure::Core::Amqp::_internal::ManagementClient managementClient{
+          session.CreateManagementClient(eventHubName, managementClientOptions)};
+
+      managementClient.Open(context);
 
       // Send a message to the management endpoint to retrieve the properties of the eventhub.
       Azure::Core::Amqp::Models::AmqpMessage message;
       message.ApplicationProperties["name"]
           = static_cast<Azure::Core::Amqp::Models::AmqpValue>(eventHubName);
       message.SetBody(Azure::Core::Amqp::Models::AmqpValue{});
-      auto result = m_managementClient->ExecuteOperation(
+      auto result = managementClient.ExecuteOperation(
           "READ" /* operation */,
           "com.microsoft:eventhub" /* type of operation */,
           "" /* locales */,
@@ -151,15 +167,26 @@ namespace Azure { namespace Messaging { namespace EventHubs { namespace _detail 
           properties.PartitionIds.push_back(static_cast<std::string>(partition));
         }
       }
+      managementClient.Close();
+
       return properties;
     }
 
-    Models::EventHubPartitionProperties GetEventHubsPartitionProperties(
+    static Models::EventHubPartitionProperties GetEventHubsPartitionProperties(
+        Azure::Core::Amqp::_internal::Session const& session,
         std::string const& eventHubName,
         std::string const& partitionId,
         Core::Context const& context)
     {
-      EnsureManagementClient(context);
+      // Create a management client off the session.
+      // Eventhubs management APIs return a status code in the "status-code" application properties.
+      Azure::Core::Amqp::_internal::ManagementClientOptions managementClientOptions;
+      managementClientOptions.EnableTrace = EnableAmqpTrace;
+      managementClientOptions.ExpectedStatusCodeKeyName = "status-code";
+      Azure::Core::Amqp::_internal::ManagementClient managementClient{
+          session.CreateManagementClient(eventHubName, managementClientOptions)};
+
+      managementClient.Open(context);
 
       // Send a message to the management endpoint to retrieve the properties of the eventhub.
       Azure::Core::Amqp::Models::AmqpMessage message;
@@ -168,7 +195,7 @@ namespace Azure { namespace Messaging { namespace EventHubs { namespace _detail 
       message.ApplicationProperties["partition"]
           = Azure::Core::Amqp::Models::AmqpValue{partitionId};
       message.SetBody(Azure::Core::Amqp::Models::AmqpValue{});
-      auto result = m_managementClient->ExecuteOperation(
+      auto result = managementClient.ExecuteOperation(
           "READ" /* operation */,
           "com.microsoft:partition" /* type of operation */,
           "" /* locales */,
@@ -206,6 +233,25 @@ namespace Azure { namespace Messaging { namespace EventHubs { namespace _detail 
         properties.LastEnqueuedOffset = std::strtoull(
             static_cast<std::string>(bodyMap["last_enqueued_offset"]).c_str(), nullptr, 10);
 
+        Azure::Core::Diagnostics::_internal::Log::Stream(
+            Azure::Core::Diagnostics::Logger::Level::Informational)
+            << "last enqueued time utc: " << bodyMap["last_enqueued_time_utc"];
+        Azure::Core::Diagnostics::_internal::Log::Stream(
+            Azure::Core::Diagnostics::Logger::Level::Informational)
+            << "last enqueued time utc: "
+            << static_cast<std::chrono::milliseconds>(
+                   bodyMap["last_enqueued_time_utc"].AsTimestamp())
+                   .count()
+            << " ms";
+        Azure::Core::Diagnostics::_internal::Log::Stream(
+            Azure::Core::Diagnostics::Logger::Level::Informational)
+            << "last enqueued time utc: "
+            << std::chrono::duration_cast<std::chrono::seconds>(
+                   static_cast<std::chrono::milliseconds>(
+                       bodyMap["last_enqueued_time_utc"].AsTimestamp()))
+                   .count()
+            << " s";
+
         properties.LastEnqueuedTimeUtc = Azure::DateTime(std::chrono::system_clock::from_time_t(
             std::chrono::duration_cast<std::chrono::seconds>(
                 static_cast<std::chrono::milliseconds>(
@@ -213,63 +259,9 @@ namespace Azure { namespace Messaging { namespace EventHubs { namespace _detail 
                 .count()));
         properties.IsEmpty = bodyMap["is_partition_empty"];
       }
+      managementClient.Close();
+
       return properties;
-    }
-
-  private:
-    void EnsureManagementClient(Azure::Core::Context const& context)
-    {
-
-      std::unique_lock<std::mutex> lock(m_managementClientMutex);
-      if (!m_managementClient)
-      {
-        // Create a management client off the session.
-        // Eventhubs management APIs return a status code in the "status-code" application
-        // properties.
-        Azure::Core::Amqp::_internal::ManagementClientOptions managementClientOptions;
-        managementClientOptions.EnableTrace = _detail::EnableAmqpTrace;
-        managementClientOptions.ExpectedStatusCodeKeyName = "status-code";
-        m_managementClient = std::make_unique<Azure::Core::Amqp::_internal::ManagementClient>(
-            m_session.CreateManagementClient(m_eventHub, managementClientOptions));
-
-        m_managementClient->Open(context);
-        m_managementClientIsOpen = true;
-      }
-    }
-
-    std::unique_ptr<Azure::Core::Amqp::_internal::ManagementClient> const& GetManagementClient()
-    {
-      std::unique_lock<std::mutex> lock(m_managementClientMutex);
-      return m_managementClient;
-    }
-
-    std::mutex m_managementClientMutex;
-    Azure::Core::Amqp::_internal::Session m_session;
-    std::unique_ptr<Azure::Core::Amqp::_internal::ManagementClient> m_managementClient;
-    bool m_managementClientIsOpen{false};
-    std::string m_eventHub;
-  };
-
-  class EventHubsUtilities {
-
-  public:
-    template <typename T> static void SetUserAgent(T& options, std::string const& applicationId)
-    {
-      constexpr const char* packageName = "cpp-azure-messaging-eventhubs-cpp";
-
-      options.Properties.emplace("Product", +packageName);
-      options.Properties.emplace("Version", PackageVersion::ToString());
-#if defined(AZ_PLATFORM_WINDOWS)
-      options.Properties.emplace("Platform", "Windows");
-#elif defined(AZ_PLATFORM_LINUX)
-      options.Properties.emplace("Platform", "Linux");
-#elif defined(AZ_PLATFORM_MAC)
-      options.Properties.emplace("Platform", "Mac");
-#endif
-      options.Properties.emplace(
-          "User-Agent",
-          Azure::Core::Http::_detail::UserAgentGenerator::GenerateUserAgent(
-              packageName, PackageVersion::ToString(), applicationId));
     }
 
     static void LogRawBuffer(std::ostream& os, std::vector<uint8_t> const& buffer);

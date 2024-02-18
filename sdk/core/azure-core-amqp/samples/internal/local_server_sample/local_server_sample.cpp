@@ -19,7 +19,6 @@ using namespace Azure::Core::Amqp;
 namespace LocalServerSample {
 
 class SampleEvents : public ConnectionEvents,
-                     public ConnectionEndpointEvents,
                      public SessionEvents,
                      public MessageReceiverEvents,
                      public Network::_detail::SocketListenerEvents {
@@ -76,7 +75,7 @@ private:
     ConnectionOptions options;
     options.ContainerId = "some";
     options.EnableTrace = true;
-    auto newConnection{std::make_unique<Connection>(amqpTransport, options, this, this)};
+    auto newConnection{std::make_unique<Connection>(amqpTransport, options, this)};
     m_connection = newConnection.get();
     m_connectionQueue.CompleteOperation(std::move(newConnection));
   }
@@ -150,9 +149,7 @@ private:
     m_messageQueue.CompleteOperation(message);
     return Azure::Core::Amqp::Models::_internal::Messaging::DeliveryAccepted();
   }
-  virtual void OnMessageReceiverDisconnected(
-      MessageReceiver const&,
-      Models::_internal::AmqpError const& error) override
+  virtual void OnMessageReceiverDisconnected(Models::_internal::AmqpError const& error) override
   {
     std::cerr << "Message receiver error: " << error << std::endl;
   }

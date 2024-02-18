@@ -127,7 +127,7 @@ namespace Azure { namespace Messaging { namespace EventHubs {
 
     for (auto const& ownership : ownerships)
     {
-      AddPartitionClient(ownership, checkpoints, consumers, context);
+      AddPartitionClient(ownership, checkpoints, consumers);
     }
   }
 
@@ -152,8 +152,7 @@ namespace Azure { namespace Messaging { namespace EventHubs {
   void Processor::AddPartitionClient(
       Models::Ownership const& ownership,
       std::map<std::string, Models::Checkpoint>& checkpoints,
-      std::weak_ptr<ConsumersType> consumers,
-      Core::Context const& context)
+      std::weak_ptr<ConsumersType> consumers)
   {
     Log::Stream(Logger::Level::Verbose) << "Add partition client for " << ownership;
 
@@ -200,7 +199,7 @@ namespace Azure { namespace Messaging { namespace EventHubs {
     {
       Log::Stream(Logger::Level::Verbose)
           << "nextPartitionClients is full, discarding partition client..";
-      processorPartitionClient->Close(context);
+      processorPartitionClient->Close();
     }
   }
 

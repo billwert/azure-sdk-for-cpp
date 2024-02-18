@@ -46,89 +46,89 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
 namespace Azure { namespace Core { namespace Amqp { namespace Models {
   namespace _detail {
 
-    std::ostream& operator<<(std::ostream& os, AMQP_TYPE value)
+    std::ostream& operator<<(std::ostream& os, AMQP_TYPE const value)
     {
       switch (value)
       {
         case AMQP_TYPE_INVALID:
-          os << "AMQP_TYPE_INVALID";
+          os << "INVALID";
           break;
         case AMQP_TYPE_NULL:
-          os << "AMQP_TYPE_NULL";
+          os << "NULL";
           break;
         case AMQP_TYPE_BOOL:
-          os << "AMQP_TYPE_BOOL";
+          os << "BOOL";
           break;
         case AMQP_TYPE_UBYTE:
-          os << "AMQP_TYPE_UBYTE";
+          os << "UBYTE";
           break;
         case AMQP_TYPE_USHORT:
-          os << "AMQP_TYPE_USHORT";
+          os << "USHORT";
           break;
         case AMQP_TYPE_UINT:
-          os << "AMQP_TYPE_UINT";
+          os << "UINT";
           break;
         case AMQP_TYPE_ULONG:
-          os << "AMQP_TYPE_ULONG";
+          os << "ULONG";
           break;
         case AMQP_TYPE_BYTE:
-          os << "AMQP_TYPE_BYTE";
+          os << "BYTE";
           break;
         case AMQP_TYPE_SHORT:
-          os << "AMQP_TYPE_SHORT";
+          os << "SHORT";
           break;
         case AMQP_TYPE_INT:
-          os << "AMQP_TYPE_INT";
+          os << "INT";
           break;
         case AMQP_TYPE_LONG:
-          os << "AMQP_TYPE_LONG";
+          os << "LONG";
           break;
         case AMQP_TYPE_FLOAT:
-          os << "AMQP_TYPE_FLOAT";
+          os << "FLOAT";
           break;
         case AMQP_TYPE_DOUBLE:
-          os << "AMQP_TYPE_DOUBLE";
+          os << "DOUBLE";
           break;
         case AMQP_TYPE_CHAR:
-          os << "AMQP_TYPE_CHAR";
+          os << "CHAR";
           break;
         case AMQP_TYPE_TIMESTAMP:
-          os << "AMQP_TYPE_TIMESTAMP";
+          os << "TIMESTAMP";
           break;
         case AMQP_TYPE_UUID:
-          os << "AMQP_TYPE_UUID";
+          os << "UUID";
           break;
         case AMQP_TYPE_BINARY:
-          os << "AMQP_TYPE_BINARY";
+          os << "BINARY";
           break;
         case AMQP_TYPE_STRING:
-          os << "AMQP_TYPE_STRING";
+          os << "STRING";
           break;
         case AMQP_TYPE_SYMBOL:
-          os << "AMQP_TYPE_SYMBOL";
+          os << "SYMBOL";
           break;
         case AMQP_TYPE_LIST:
-          os << "AMQP_TYPE_LIST";
+          os << "LIST";
           break;
         case AMQP_TYPE_MAP:
-          os << "AMQP_TYPE_MAP";
+          os << "MAP";
           break;
         case AMQP_TYPE_ARRAY:
-          os << "AMQP_TYPE_ARRAY";
+          os << "ARRAY";
           break;
         case AMQP_TYPE_DESCRIBED:
-          os << "AMQP_TYPE_DESCRIBED";
+          os << "DESCRIBED";
           break;
         case AMQP_TYPE_COMPOSITE:
-          os << "AMQP_TYPE_COMPOSITE";
+          os << "COMPOSITE";
           break;
         case AMQP_TYPE_UNKNOWN:
-          os << "AMQP_TYPE_UNKNOWN";
+          os << "UNKNOWN";
           break;
       }
       return os;
     }
-    std::ostream& operator<<(std::ostream& os, AMQP_VALUE const value)
+    std::ostream& operator<<(std::ostream& os, AMQP_VALUE_DATA_TAG* const value)
     {
       if (value != nullptr)
       {
@@ -146,90 +146,6 @@ namespace Azure { namespace Core { namespace Amqp { namespace Models {
     }
   } // namespace _detail
 
-  std::ostream& operator<<(std::ostream& os, AmqpValueType value)
-  {
-
-    switch (value)
-    {
-      case AmqpValueType::Invalid:
-        os << "Invalid";
-        break;
-      case AmqpValueType::Null:
-        os << "Null";
-        break;
-      case AmqpValueType::Bool:
-        os << "Bool";
-        break;
-      case AmqpValueType::Ubyte:
-        os << "Ubyte";
-        break;
-      case AmqpValueType::Ushort:
-        os << "Ushort";
-        break;
-      case AmqpValueType::Uint:
-        os << "Uint";
-        break;
-      case AmqpValueType::Ulong:
-        os << "Ulong";
-        break;
-      case AmqpValueType::Byte:
-        os << "Byte";
-        break;
-      case AmqpValueType::Short:
-        os << "Short";
-        break;
-      case AmqpValueType::Int:
-        os << "Int";
-        break;
-      case AmqpValueType::Long:
-        os << "Long";
-        break;
-      case AmqpValueType::Float:
-        os << "Float";
-        break;
-      case AmqpValueType::Double:
-        os << "Double";
-        break;
-      case AmqpValueType::Char:
-        os << "Char";
-        break;
-      case AmqpValueType::Timestamp:
-        os << "Timestamp";
-        break;
-      case AmqpValueType::Uuid:
-        os << "Uuid";
-        break;
-      case AmqpValueType::Binary:
-        os << "Binary";
-        break;
-      case AmqpValueType::String:
-        os << "String";
-        break;
-      case AmqpValueType::Symbol:
-        os << "Symbol";
-        break;
-      case AmqpValueType::List:
-        os << "List";
-        break;
-      case AmqpValueType::Map:
-        os << "Map";
-        break;
-      case AmqpValueType::Array:
-        os << "Array";
-        break;
-      case AmqpValueType::Described:
-        os << "Described";
-        break;
-      case AmqpValueType::Composite:
-        os << "Composite";
-        break;
-      case AmqpValueType::Unknown:
-        os << "Unknown";
-        break;
-    }
-
-    return os;
-  }
   AmqpValue::~AmqpValue() {}
 
   AmqpValue::AmqpValue(bool bool_value)

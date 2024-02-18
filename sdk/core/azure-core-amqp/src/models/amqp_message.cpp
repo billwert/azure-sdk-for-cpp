@@ -749,14 +749,13 @@ namespace Azure { namespace Core { namespace Amqp { namespace Models {
 
   std::ostream& operator<<(std::ostream& os, AmqpMessage const& message)
   {
-    os << "Message: <" << std::endl;
-
+    os << "Message: " << std::endl;
     if (message.MessageFormat != AmqpDefaultMessageFormatValue)
     {
       os << "    Message Format: " << message.MessageFormat << std::endl;
     }
-    os << "    " << message.Header << std::endl;
-    os << "    " << message.Properties;
+    os << "    Header " << message.Header << std::endl;
+    os << "    Properties: " << message.Properties << std::endl;
 
     {
       if (!message.ApplicationProperties.empty())
@@ -797,49 +796,38 @@ namespace Azure { namespace Core { namespace Amqp { namespace Models {
       }
     }
 
-    os << std::endl << "    Body: [";
+    os << std::endl << "    Body: [" << std::endl;
     switch (message.BodyType)
     {
       case MessageBodyType::Invalid:
-        os << "Invalid";
+        os << "        Invalid";
         break;
       case MessageBodyType::None:
-        os << "None";
+        os << "        None";
         break;
       case MessageBodyType::Data: {
-        os << "AmqpBinaryData: [";
+        os << "        AMQP Data: [";
         auto const& bodyBinary = message.GetBodyAsBinary();
         uint8_t i = 0;
         for (auto const& val : bodyBinary)
         {
-          os << val.size() << " bytes";
+          os << "Data: " << val << std::endl;
           if (i < bodyBinary.size() - 1)
           {
             os << ", ";
           }
           i += 1;
         }
-        os << "]";
+        os << "    ]";
       }
       break;
       case MessageBodyType::Sequence: {
-        os << "AmqpSequence: [";
+        os << "        AMQP Sequence: [";
         auto const& bodySequence = message.GetBodyAsAmqpList();
         uint8_t i = 0;
         for (auto const& val : bodySequence)
         {
-          os << "{Sequence: ";
-          uint8_t j = 0;
-          for (auto const& seqVal : val)
-          {
-            os << seqVal.GetType();
-            if (j < val.size() - 1)
-            {
-              os << ", ";
-            }
-            j += 1;
-          }
-          os << "}";
+          os << "Sequence: " << val << std::endl;
           if (i < bodySequence.size() - 1)
           {
             os << ", ";
@@ -850,10 +838,10 @@ namespace Azure { namespace Core { namespace Amqp { namespace Models {
       }
       break;
       case MessageBodyType::Value:
-        os << "AmqpValue, type=" << message.GetBodyAsAmqpValue().GetType();
+        os << "        AmqpValue: " << message.GetBodyAsAmqpValue();
         break;
     }
-    os << std::endl << ">";
+    os << std::endl << "    ]";
 
     return os;
   }

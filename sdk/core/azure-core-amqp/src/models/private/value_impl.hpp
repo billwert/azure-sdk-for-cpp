@@ -4,7 +4,6 @@
 #pragma once
 
 #include "../../amqp/private/unique_handle.hpp"
-#include "azure/core/amqp/models/amqp_value.hpp"
 
 #include <azure_uamqp_c/amqpvalue.h>
 
@@ -26,7 +25,6 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
         BasicUniqueHandle<std::remove_pointer<AMQPVALUE_DECODER_HANDLE>::type, FreeAmqpDecoder>;
     // @endcond
   };
-
 }}}} // namespace Azure::Core::Amqp::_detail
 
 namespace Azure { namespace Core { namespace Amqp { namespace Models { namespace _detail {
@@ -58,7 +56,5 @@ namespace Azure { namespace Core { namespace Amqp { namespace Models { namespace
   private:
     UniqueAmqpValueHandle m_value;
   };
-  std::ostream& operator<<(std::ostream& os, AMQP_TYPE value);
-  std::ostream& operator<<(std::ostream& os, AMQP_VALUE const value);
 
 }}}}} // namespace Azure::Core::Amqp::Models::_detail

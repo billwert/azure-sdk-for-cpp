@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "azure/core/amqp/internal/amqp_settle_mode.hpp"
 #include "azure/core/amqp/internal/models/amqp_error.hpp"
 #include "azure/core/amqp/models/amqp_message.hpp"
 #include "azure/core/amqp/models/amqp_value.hpp"
@@ -33,7 +32,13 @@ namespace Azure { namespace Core { namespace Amqp { namespace _internal {
     Closing,
     Error,
   };
-  std::ostream& operator<<(std::ostream& stream, _internal::MessageReceiverState state);
+  std::ostream& operator<<(std::ostream& stream, _internal::MessageReceiverState const& state);
+
+  enum class ReceiverSettleMode
+  {
+    First,
+    Second,
+  };
 
   class MessageReceiver;
 
@@ -99,10 +104,7 @@ namespace Azure { namespace Core { namespace Amqp { namespace _internal {
         MessageReceiver const& receiver,
         std::shared_ptr<Models::AmqpMessage> const& message)
         = 0;
-    virtual void OnMessageReceiverDisconnected(
-        MessageReceiver const& receiver,
-        Models::_internal::AmqpError const& error)
-        = 0;
+    virtual void OnMessageReceiverDisconnected(Models::_internal::AmqpError const& error) = 0;
   };
 
   /** @brief MessageReceiver
@@ -145,7 +147,7 @@ namespace Azure { namespace Core { namespace Amqp { namespace _internal {
     /** @brief Closes the message receiver.
      *
      */
-    void Close(Context const& context = {});
+    void Close();
 
     /** @brief Gets the name of the underlying link.
      *

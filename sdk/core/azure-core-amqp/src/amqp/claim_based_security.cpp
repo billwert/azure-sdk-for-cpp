@@ -28,7 +28,7 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
   ClaimsBasedSecurity::~ClaimsBasedSecurity() noexcept {}
 
   CbsOpenResult ClaimsBasedSecurity::Open(Context const& context) { return m_impl->Open(context); }
-  void ClaimsBasedSecurity::Close(Context const& context) { m_impl->Close(context); }
+  void ClaimsBasedSecurity::Close() { m_impl->Close(); }
 
   std::tuple<CbsOperationResult, uint32_t, std::string> ClaimsBasedSecurity::PutToken(
       CbsTokenType tokenType,
@@ -82,7 +82,7 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
     }
   }
 
-  void ClaimsBasedSecurityImpl::Close(Context const& context) { m_management->Close(context); }
+  void ClaimsBasedSecurityImpl::Close() { m_management->Close(); }
 
   std::tuple<CbsOperationResult, uint32_t, std::string> ClaimsBasedSecurityImpl::PutToken(
       CbsTokenType tokenType,
@@ -103,6 +103,13 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
         context);
     if (result.Status != ManagementOperationStatus::Ok)
     {
+      throw std::runtime_error(
+          "Could not authenticate to client. Error Status: " + std::to_string(result.StatusCode)
+          + " condition: " + result.Error.Condition.ToString()
+          + " reason: " + result.Error.Description);
+    }
+    else
+    {
       CbsOperationResult cbsResult;
       switch (result.Status)
       {
@@ -121,23 +128,16 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
         case ManagementOperationStatus::InstanceClosed:
           cbsResult = CbsOperationResult::InstanceClosed;
           break;
-        case ManagementOperationStatus::Cancelled:
-          cbsResult = CbsOperationResult::Cancelled;
-          break;
         default:
           throw std::runtime_error("Unknown management operation status.");
       }
       Log::Stream(Logger::Level::Informational)
           << "CBS PutToken result: " << cbsResult << " status code: " << result.StatusCode
-          << " Error: " << result.Error << ".";
+          << " Error: " << result.Error.Description << ".";
       return std::make_tuple(cbsResult, result.StatusCode, result.Error.Description);
     }
-    else
-    {
-      return std::make_tuple(CbsOperationResult::Ok, result.StatusCode, result.Error.Description);
-    }
   }
-  std::ostream& operator<<(std::ostream& os, CbsOperationResult operationResult)
+  std::ostream& operator<<(std::ostream& os, CbsOperationResult const& operationResult)
   {
     switch (operationResult)
     {
@@ -156,14 +156,14 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
       case CbsOperationResult::InstanceClosed:
         os << "InstanceClosed";
         break;
-      case CbsOperationResult::Cancelled:
-        os << "Cancelled";
-        break;
+      default:
+        os << "Unknown CbsOperationResult."
+           << static_cast<std::underlying_type<CbsOperationResult>::type>(operationResult);
     }
     return os;
   }
 
-  std::ostream& operator<<(std::ostream& os, CbsOpenResult openResult)
+  std::ostream& operator<<(std::ostream& os, CbsOpenResult const& openResult)
   {
     switch (openResult)
     {
@@ -179,6 +179,9 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
       case CbsOpenResult::Cancelled:
         os << "Cancelled";
         break;
+      default:
+        os << "Unknown CbsOpenResult."
+           << static_cast<std::underlying_type<CbsOpenResult>::type>(openResult);
     }
     return os;
   }

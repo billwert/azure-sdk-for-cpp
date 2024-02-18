@@ -20,6 +20,7 @@ struct EventHubProperties final
   std::vector<std::string> PartitionIds;
   Azure::DateTime CreatedAt;
 };
+
 EventHubProperties GetEventHubProperties(
     Azure::Core::Amqp::_internal::Session const& session,
     std::string const& eventHubName)
@@ -93,8 +94,7 @@ struct EventHubPartitionProperties final
 std::tuple<bool, EventHubPartitionProperties> GetPartitionProperties(
     Azure::Core::Amqp::_internal::Session const& session,
     std::string const& eventHubName,
-    std::string const& partitionId,
-    Azure::Core::Context const& context = {})
+    std::string const& partitionId)
 {
 
   // Create a management client off the session.
@@ -105,7 +105,7 @@ std::tuple<bool, EventHubPartitionProperties> GetPartitionProperties(
   Azure::Core::Amqp::_internal::ManagementClient managementClient(
       session.CreateManagementClient(eventHubName, managementClientOptions));
 
-  managementClient.Open(context);
+  managementClient.Open();
 
   // Send a message to the management endpoint to retrieve the properties of the eventhub.
   Azure::Core::Amqp::Models::AmqpMessage message;
@@ -116,8 +116,7 @@ std::tuple<bool, EventHubPartitionProperties> GetPartitionProperties(
       "READ" /* operation */,
       "com.microsoft:partition" /* type of operation */,
       "" /* locales */,
-      message,
-      context);
+      message);
 
   EventHubPartitionProperties properties;
   bool error{false};
@@ -151,7 +150,7 @@ std::tuple<bool, EventHubPartitionProperties> GetPartitionProperties(
             .count()));
     properties.IsEmpty = bodyMap["is_partition_empty"];
   }
-  managementClient.Close(context);
+  managementClient.Close();
 
   return std::make_tuple(error, properties);
 }
@@ -173,9 +172,7 @@ int main()
 
   // Establish the connection to the eventhub.
 
-  auto credential{
-      std::make_shared<Azure::Core::Amqp::_internal::ServiceBusSasConnectionStringCredential>(
-          eventhubConnectionString)};
+  auto credential{std::make_shared<Azure::Identity::DefaultAzureCredential>()};
 
   Azure::Core::Amqp::_internal::ConnectionOptions connectionOptions;
   connectionOptions.ContainerId = "some";
@@ -187,8 +184,8 @@ int main()
 
   // Establish a session to the eventhub.
   Azure::Core::Amqp::_internal::SessionOptions sessionOptions;
-  sessionOptions.InitialIncomingWindowSize = (std::numeric_limits<int32_t>::max)();
-  sessionOptions.InitialOutgoingWindowSize = (std::numeric_limits<uint16_t>::max)();
+  sessionOptions.InitialIncomingWindowSize = std::numeric_limits<int32_t>::max();
+  sessionOptions.InitialOutgoingWindowSize = std::numeric_limits<uint16_t>::max();
   Azure::Core::Amqp::_internal::Session session(connection.CreateSession(sessionOptions));
 
   auto eventHubProperties = GetEventHubProperties(session, eventhubsEntity);

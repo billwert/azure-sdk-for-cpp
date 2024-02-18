@@ -50,9 +50,83 @@ namespace Azure { namespace Core { namespace Amqp { namespace Tests {
     EXPECT_EQ(openResult, ManagementOpenStatus::Error);
   }
 
-  namespace {
+  TEST_F(TestManagement, ManagementOpenClose)
+  {
+    MessageTests::AmqpServerMock mockServer;
 
-    class ManagementServiceEndpoint final : public MessageTests::MockServiceEndpoint {
+    ConnectionOptions connectionOptions;
+    connectionOptions.Port = mockServer.GetPort();
+    Connection connection("localhost", nullptr, connectionOptions);
+
+    Session session{connection.CreateSession({})};
+    ManagementClientOptions options;
+    options.EnableTrace = 1;
+    ManagementClient management(session.CreateManagementClient("Test", options));
+
+    mockServer.StartListening();
+
+    auto openResult = management.Open();
+    EXPECT_EQ(openResult, ManagementOpenStatus::Ok);
+
+    management.Close();
+
+    mockServer.StopListening();
+  }
+
+  TEST_F(TestManagement, ManagementOpenCloseAuthenticated)
+  {
+    MessageTests::AmqpServerMock mockServer;
+
+    auto sasCredential = std::make_shared<ServiceBusSasConnectionStringCredential>(
+        "Endpoint=amqp://localhost:" + std::to_string(mockServer.GetPort())
+        + "/;SharedAccessKeyName=MyTestKey;SharedAccessKey=abcdabcd;EntityPath=testLocation");
+
+    ConnectionOptions connectionOptions;
+    connectionOptions.Port = mockServer.GetPort();
+    Connection connection("localhost", sasCredential, connectionOptions);
+
+    Session session{connection.CreateSession({})};
+    ManagementClientOptions options;
+    options.EnableTrace = 1;
+    ManagementClient management(session.CreateManagementClient("Test", options));
+
+    mockServer.StartListening();
+
+    auto openResult = management.Open();
+    EXPECT_EQ(openResult, ManagementOpenStatus::Ok);
+
+    management.Close();
+
+    mockServer.StopListening();
+  }
+
+  TEST_F(TestManagement, ManagementOpenCloseError)
+  {
+    MessageTests::AmqpServerMock mockServer;
+
+    ConnectionOptions connectionOptions;
+    connectionOptions.Port = mockServer.GetPort();
+    Connection connection("localhost", nullptr, connectionOptions);
+
+    Session session{connection.CreateSession({})};
+    ManagementClientOptions options;
+    options.EnableTrace = 1;
+    ManagementClient management(session.CreateManagementClient("Test", options));
+
+    mockServer.StartListening();
+    Azure::Core::Context context;
+    context.Cancel();
+    EXPECT_EQ(management.Open(context), ManagementOpenStatus::Cancelled);
+
+    management.Close();
+
+    mockServer.StopListening();
+  }
+#endif // !defined(AZ_PLATFORM_MAC)
+#if !defined(AZ_PLATFORM_MAC)
+
+  namespace {
+    class ManagementReceiver : public MessageTests::AmqpServerMock {
     public:
       void SetStatusCode(AmqpValue expectedStatusCode)
       {
@@ -70,12 +144,6 @@ namespace Azure { namespace Core { namespace Amqp { namespace Tests {
       {
         m_expectedStatusDescriptionName = expectedStatusDescriptionName;
       }
-      ManagementServiceEndpoint(MessageTests::MockServiceEndpointOptions const& options)
-          : MockServiceEndpoint("$management", options)
-      {
-      }
-
-      virtual ~ManagementServiceEndpoint() = default;
 
     private:
       AmqpValue OnMessageReceived(
@@ -101,10 +169,12 @@ namespace Azure { namespace Core { namespace Amqp { namespace Tests {
           GTEST_LOG_(INFO) << "RV=" << rv;
           return rv;
         }
-        return MockServiceEndpoint::OnMessageReceived(receiver, incomingMessage);
+        return AmqpServerMock::OnMessageReceived(receiver, incomingMessage);
       }
-      void MessageReceived(std::string const&, std::shared_ptr<AmqpMessage> const& incomingMessage)
-          override
+      void MessageReceived(
+          std::string const&,
+          AmqpServerMock::MessageLinkComponents const& linkComponents,
+          std::shared_ptr<AmqpMessage> const& incomingMessage) const override
       {
         if (incomingMessage->ApplicationProperties.at("operation") == "Test")
         {
@@ -126,7 +196,7 @@ namespace Azure { namespace Core { namespace Amqp { namespace Tests {
 
           // Block until the send is completed. Note: Do *not* use the listener context to ensure
           // that the send is completed.
-          GetMessageSender().Send(responseMessage);
+          linkComponents.LinkSender->Send(responseMessage);
         }
       }
 
@@ -137,443 +207,281 @@ namespace Azure { namespace Core { namespace Amqp { namespace Tests {
     };
   } // namespace
 
-  TEST_F(TestManagement, ManagementOpenClose)
-  {
-    MessageTests::AmqpServerMock mockServer;
-    MessageTests::MockServiceEndpointOptions managementEndpointOptions;
-    managementEndpointOptions.EnableTrace = true;
-    auto endpoint = std::make_shared<ManagementServiceEndpoint>(managementEndpointOptions);
-    mockServer.AddServiceEndpoint(endpoint);
-
-    ConnectionOptions connectionOptions;
-    connectionOptions.Port = mockServer.GetPort();
-    Connection connection("localhost", nullptr, connectionOptions);
-
-    Session session{connection.CreateSession({})};
-    ManagementClientOptions options;
-    options.EnableTrace = 1;
-    ManagementClient management(session.CreateManagementClient("Test", options));
-
-    mockServer.StartListening();
-
-    auto openResult = management.Open();
-    EXPECT_EQ(openResult, ManagementOpenStatus::Ok);
-
-    management.Close();
-
-    mockServer.StopListening();
-  }
-
-  TEST_F(TestManagement, ManagementOpenCloseAuthenticated)
-  {
-    MessageTests::AmqpServerMock mockServer;
-    MessageTests::MockServiceEndpointOptions managementEndpointOptions;
-    managementEndpointOptions.EnableTrace = true;
-    auto endpoint = std::make_shared<ManagementServiceEndpoint>(managementEndpointOptions);
-    mockServer.AddServiceEndpoint(endpoint);
-
-    auto sasCredential = std::make_shared<ServiceBusSasConnectionStringCredential>(
-        "Endpoint=amqp://localhost:" + std::to_string(mockServer.GetPort())
-        + "/;SharedAccessKeyName=MyTestKey;SharedAccessKey=abcdabcd;EntityPath=testLocation");
-
-    ConnectionOptions connectionOptions;
-    connectionOptions.Port = mockServer.GetPort();
-    connectionOptions.EnableTrace = true;
-    Connection connection("localhost", sasCredential, connectionOptions);
-
-    Session session{connection.CreateSession({})};
-    ManagementClientOptions options;
-    options.EnableTrace = 1;
-    ManagementClient management(session.CreateManagementClient("Test", options));
-
-    mockServer.StartListening();
-
-    auto openResult = management.Open();
-    EXPECT_EQ(openResult, ManagementOpenStatus::Ok);
-
-    management.Close();
-
-    mockServer.StopListening();
-  }
-
-  TEST_F(TestManagement, ManagementOpenCloseAuthenticatedFail)
-  {
-    MessageTests::AmqpServerMock mockServer;
-    MessageTests::MockServiceEndpointOptions managementEndpointOptions;
-    managementEndpointOptions.EnableTrace = true;
-    auto endpoint = std::make_shared<ManagementServiceEndpoint>(managementEndpointOptions);
-    mockServer.AddServiceEndpoint(endpoint);
-
-    auto sasCredential = std::make_shared<ServiceBusSasConnectionStringCredential>(
-        "Endpoint=amqp://localhost:" + std::to_string(mockServer.GetPort())
-        + "/;SharedAccessKeyName=MyTestKey;SharedAccessKey=abcdabcd;EntityPath=testLocation");
-
-    ConnectionOptions connectionOptions;
-    connectionOptions.Port = mockServer.GetPort();
-    connectionOptions.EnableTrace = true;
-    Connection connection("localhost", sasCredential, connectionOptions);
-
-    Session session{connection.CreateSession({})};
-    ManagementClientOptions options;
-    options.EnableTrace = 1;
-    ManagementClient management(session.CreateManagementClient("Test", options));
-
-    // Force an authentication error.
-    mockServer.ForceCbsError(true);
-
-    mockServer.StartListening();
-
-    try
-    {
-      EXPECT_THROW(management.Open(), Azure::Core::Credentials::AuthenticationException);
-
-      management.Close();
-    }
-    catch (std::exception const& e)
-    {
-      GTEST_LOG_(INFO) << "Caught exception: " << e.what();
-    }
-    mockServer.StopListening();
-  }
-
-  TEST_F(TestManagement, ManagementOpenCloseError)
-  {
-    MessageTests::AmqpServerMock mockServer;
-    MessageTests::MockServiceEndpointOptions managementEndpointOptions;
-    managementEndpointOptions.EnableTrace = true;
-    auto endpoint = std::make_shared<ManagementServiceEndpoint>(managementEndpointOptions);
-    mockServer.AddServiceEndpoint(endpoint);
-
-    ConnectionOptions connectionOptions;
-    connectionOptions.Port = mockServer.GetPort();
-    Connection connection("localhost", nullptr, connectionOptions);
-
-    Session session{connection.CreateSession({})};
-    ManagementClientOptions options;
-    options.EnableTrace = 1;
-    ManagementClient management(session.CreateManagementClient("Test", options));
-
-    mockServer.StartListening();
-    Azure::Core::Context context;
-    context.Cancel();
-    EXPECT_EQ(management.Open(context), ManagementOpenStatus::Cancelled);
-
-    EXPECT_THROW(management.Close(), std::runtime_error);
-
-    mockServer.StopListening();
-  }
-#endif // !defined(AZ_PLATFORM_MAC)
-#if !defined(AZ_PLATFORM_MAC)
-
-  namespace {
-
-    class NullResponseManagementServiceEndpoint final : public MessageTests::MockServiceEndpoint {
-    public:
-      NullResponseManagementServiceEndpoint(MessageTests::MockServiceEndpointOptions const& options)
-          : MockServiceEndpoint("$management", options)
-      {
-      }
-
-    private:
-      void MessageReceived(
-          std::string const& linkName,
-          std::shared_ptr<Azure::Core::Amqp::Models::AmqpMessage> const& message) override
-      {
-        GTEST_LOG_(INFO)
-            << "NullResponseManagementServiceEndpoint::MessageReceived received on link "
-            << linkName << ": " << *message;
-      }
-    };
-  } // namespace
-
   TEST_F(TestManagement, ManagementRequestResponse)
   {
-    MessageTests::AmqpServerMock mockServer;
-    MessageTests::MockServiceEndpointOptions managementEndpointOptions;
-    managementEndpointOptions.EnableTrace = true;
-    auto endpoint
-        = std::make_shared<NullResponseManagementServiceEndpoint>(managementEndpointOptions);
-    mockServer.AddServiceEndpoint(endpoint);
+    {
+      MessageTests::AmqpServerMock mockServer;
 
-    ConnectionOptions connectionOptions;
-    connectionOptions.Port = mockServer.GetPort();
+      ConnectionOptions connectionOptions;
+      connectionOptions.Port = mockServer.GetPort();
 
-    auto sasCredential = std::make_shared<ServiceBusSasConnectionStringCredential>(
-        "Endpoint=amqp://localhost:" + std::to_string(mockServer.GetPort())
-        + "/;SharedAccessKeyName=MyTestKey;SharedAccessKey=abcdabcd;EntityPath=testLocation");
-    Connection connection("localhost", sasCredential, connectionOptions);
-    Session session{connection.CreateSession({})};
-    ManagementClientOptions options;
-    options.EnableTrace = 1;
-    ManagementClient management(session.CreateManagementClient("Test", {}));
+      auto sasCredential = std::make_shared<ServiceBusSasConnectionStringCredential>(
+          "Endpoint=amqp://localhost:" + std::to_string(mockServer.GetPort())
+          + "/;SharedAccessKeyName=MyTestKey;SharedAccessKey=abcdabcd;EntityPath=testLocation");
+      Connection connection("localhost", sasCredential, connectionOptions);
+      Session session{connection.CreateSession({})};
+      ManagementClientOptions options;
+      options.EnableTrace = 1;
+      ManagementClient management(session.CreateManagementClient("Test", {}));
 
-    mockServer.StartListening();
+      mockServer.StartListening();
 
-    auto openResult = management.Open();
-    ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
+      auto openResult = management.Open();
+      ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
 
-    AmqpMessage messageToSend;
-    messageToSend.SetBody(AmqpValue("Test"));
+      AmqpMessage messageToSend;
+      messageToSend.SetBody(AmqpValue("Test"));
+      // There's nobody to respond, so we expect this to time out.
+      Azure::Core::Context context;
+      EXPECT_ANY_THROW(management.ExecuteOperation(
+          "Test",
+          "Test",
+          "Test",
+          messageToSend,
+          context.WithDeadline(std::chrono::system_clock::now() + std::chrono::seconds(2))));
 
-    // There's nobody to respond, so we expect this to time out.
-    Azure::Core::Context context;
-    EXPECT_ANY_THROW(management.ExecuteOperation(
-        "Test",
-        "Test",
-        "Test",
-        messageToSend,
-        context.WithDeadline(std::chrono::system_clock::now() + std::chrono::seconds(2))));
+      management.Close();
 
-    management.Close();
-
-    mockServer.StopListening();
+      mockServer.StopListening();
+    }
   }
   TEST_F(TestManagement, ManagementRequestResponseSimple)
   {
-    MessageTests::AmqpServerMock mockServer;
-    auto managementEndpoint
-        = std::make_shared<ManagementServiceEndpoint>(MessageTests::MockServiceEndpointOptions{});
-    mockServer.AddServiceEndpoint(managementEndpoint);
+    {
+      ManagementReceiver mockServer;
 
-    ConnectionOptions connectionOptions;
-    connectionOptions.EnableTrace = true;
-    connectionOptions.Port = mockServer.GetPort();
+      ConnectionOptions connectionOptions;
+      connectionOptions.EnableTrace = true;
+      connectionOptions.Port = mockServer.GetPort();
 
-    Connection connection("localhost", nullptr, connectionOptions);
-    Session session{connection.CreateSession({})};
-    ManagementClientOptions options;
-    options.EnableTrace = true;
-    ManagementClient management(session.CreateManagementClient("Test", options));
+      Connection connection("localhost", nullptr, connectionOptions);
+      Session session{connection.CreateSession({})};
+      ManagementClientOptions options;
+      options.EnableTrace = true;
+      ManagementClient management(session.CreateManagementClient("Test", options));
 
-    mockServer.StartListening();
+      mockServer.StartListening();
 
-    auto openResult = management.Open();
-    ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
+      auto openResult = management.Open();
+      ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
 
-    AmqpMessage messageToSend;
-    messageToSend.SetBody(AmqpValue("Test"));
+      AmqpMessage messageToSend;
+      messageToSend.SetBody(AmqpValue("Test"));
 
-    auto response = management.ExecuteOperation("Test", "Test", "Test", messageToSend);
-    EXPECT_EQ(response.Status, ManagementOperationStatus::Ok);
-    EXPECT_EQ(response.StatusCode, 200);
-    EXPECT_EQ(response.Error.Description, "Successful");
-    management.Close();
+      auto response = management.ExecuteOperation("Test", "Test", "Test", messageToSend);
+      EXPECT_EQ(response.Status, ManagementOperationStatus::Ok);
+      EXPECT_EQ(response.StatusCode, 200);
+      EXPECT_EQ(response.Error.Description, "Successful");
+      management.Close();
 
-    mockServer.StopListening();
+      mockServer.StopListening();
+    }
   }
-
   TEST_F(TestManagement, ManagementRequestResponseExpect500)
   {
 
-    MessageTests::AmqpServerMock mockServer;
-    auto managementEndpoint
-        = std::make_shared<ManagementServiceEndpoint>(MessageTests::MockServiceEndpointOptions{});
-    mockServer.AddServiceEndpoint(managementEndpoint);
+    {
+      ManagementReceiver mockServer;
+      ConnectionOptions connectionOptions;
+      connectionOptions.EnableTrace = true;
+      connectionOptions.Port = mockServer.GetPort();
 
-    ConnectionOptions connectionOptions;
-    connectionOptions.EnableTrace = true;
-    connectionOptions.Port = mockServer.GetPort();
+      Connection connection("localhost", nullptr, connectionOptions);
+      Session session{connection.CreateSession({})};
 
-    Connection connection("localhost", nullptr, connectionOptions);
-    Session session{connection.CreateSession({})};
+      ManagementClientOptions options;
+      options.EnableTrace = true;
+      ManagementClient management(session.CreateManagementClient("Test", options));
 
-    ManagementClientOptions options;
-    options.EnableTrace = true;
-    ManagementClient management(session.CreateManagementClient("Test", options));
+      mockServer.SetStatusCode(500);
+      mockServer.SetStatusDescription("Bad Things Happened.");
+      mockServer.StartListening();
 
-    managementEndpoint->SetStatusCode(500);
-    managementEndpoint->SetStatusDescription("Bad Things Happened.");
-    mockServer.StartListening();
+      auto openResult = management.Open();
+      ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
 
-    auto openResult = management.Open();
-    ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
+      AmqpMessage messageToSend;
+      messageToSend.SetBody(AmqpValue("Test"));
 
-    AmqpMessage messageToSend;
-    messageToSend.SetBody(AmqpValue("Test"));
+      auto response = management.ExecuteOperation("Test", "Test", "Test", messageToSend);
+      EXPECT_EQ(response.Status, ManagementOperationStatus::FailedBadStatus);
+      EXPECT_EQ(response.StatusCode, 500);
+      EXPECT_EQ(response.Error.Description, "Bad Things Happened.");
+      management.Close();
 
-    auto response = management.ExecuteOperation("Test", "Test", "Test", messageToSend);
-    EXPECT_EQ(response.Status, ManagementOperationStatus::FailedBadStatus);
-    EXPECT_EQ(response.StatusCode, 500);
-    EXPECT_EQ(response.Error.Description, "Bad Things Happened.");
-    management.Close();
-
-    mockServer.StopListening();
+      mockServer.StopListening();
+    }
   }
   TEST_F(TestManagement, ManagementRequestResponseBogusStatusCode)
   {
     // Send a response with a bogus status code type.
-    MessageTests::AmqpServerMock mockServer;
-    auto managementEndpoint
-        = std::make_shared<ManagementServiceEndpoint>(MessageTests::MockServiceEndpointOptions{});
-    mockServer.AddServiceEndpoint(managementEndpoint);
+    {
+      ManagementReceiver mockServer;
 
-    ConnectionOptions connectionOptions;
-    connectionOptions.EnableTrace = true;
-    connectionOptions.Port = mockServer.GetPort();
-    Connection connection("localhost", nullptr, connectionOptions);
-    Session session{connection.CreateSession({})};
-    ManagementClientOptions options;
-    options.EnableTrace = true;
-    ManagementClient management(session.CreateManagementClient("Test", options));
+      ConnectionOptions connectionOptions;
+      connectionOptions.EnableTrace = true;
+      connectionOptions.Port = mockServer.GetPort();
+      Connection connection("localhost", nullptr, connectionOptions);
+      Session session{connection.CreateSession({})};
+      ManagementClientOptions options;
+      options.EnableTrace = true;
+      ManagementClient management(session.CreateManagementClient("Test", options));
 
-    // Set the response status code to something other than an int - that will cause the response
-    // to be rejected by the management client.
-    managementEndpoint->SetStatusCode(500u);
-    managementEndpoint->SetStatusDescription("Bad Things Happened.");
-    mockServer.StartListening();
+      // Set the response status code to something other than an int - that will cause the response
+      // to be rejected by the management client.
+      mockServer.SetStatusCode(500u);
+      mockServer.SetStatusDescription("Bad Things Happened.");
+      mockServer.StartListening();
 
-    auto openResult = management.Open();
-    ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
+      auto openResult = management.Open();
+      ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
 
-    AmqpMessage messageToSend;
-    messageToSend.SetBody(AmqpValue("Test"));
+      AmqpMessage messageToSend;
+      messageToSend.SetBody(AmqpValue("Test"));
 
-    auto response = management.ExecuteOperation("Test", "Type", "Locales", messageToSend);
-    EXPECT_EQ(response.Status, ManagementOperationStatus::Error);
-    EXPECT_EQ(response.StatusCode, 500);
-    EXPECT_EQ(
-        response.Error.Description,
-        "Message Delivery Rejected: Received message statusCode value is not an int.");
-    management.Close();
+      auto response = management.ExecuteOperation("Test", "Type", "Locales", messageToSend);
+      EXPECT_EQ(response.Status, ManagementOperationStatus::Error);
+      EXPECT_EQ(response.StatusCode, 500);
+      EXPECT_EQ(
+          response.Error.Description,
+          "Message Delivery Rejected: Received message statusCode value is not an int.");
+      management.Close();
 
-    mockServer.StopListening();
+      mockServer.StopListening();
+    }
   }
   TEST_F(TestManagement, ManagementRequestResponseBogusStatusName)
   {
     // Send a response to the request with a bogus status code name.
-    MessageTests::AmqpServerMock mockServer;
-    auto managementEndpoint
-        = std::make_shared<ManagementServiceEndpoint>(MessageTests::MockServiceEndpointOptions{});
-    mockServer.AddServiceEndpoint(managementEndpoint);
-
-    struct ManagementEventsHandler : public ManagementClientEvents
     {
-      void OnError(Azure::Core::Amqp::Models::_internal::AmqpError const&) override
+      ManagementReceiver mockServer;
+
+      struct ManagementEventsHandler : public ManagementClientEvents
       {
-        Error = true;
-      }
-      bool Error{false};
-    };
-    ManagementEventsHandler managementEvents;
+        void OnError(Azure::Core::Amqp::Models::_internal::AmqpError const&) override
+        {
+          Error = true;
+        }
+        bool Error{false};
+      };
+      ManagementEventsHandler managementEvents;
 
-    ConnectionOptions connectionOptions;
-    connectionOptions.EnableTrace = true;
-    connectionOptions.Port = mockServer.GetPort();
+      ConnectionOptions connectionOptions;
+      connectionOptions.EnableTrace = true;
+      connectionOptions.Port = mockServer.GetPort();
 
-    Connection connection("localhost", nullptr, connectionOptions);
-    Session session{connection.CreateSession({})};
-    ManagementClientOptions options;
-    options.EnableTrace = true;
+      Connection connection("localhost", nullptr, connectionOptions);
+      Session session{connection.CreateSession({})};
+      ManagementClientOptions options;
+      options.EnableTrace = true;
 
-    ManagementClient management(session.CreateManagementClient("Test", options, &managementEvents));
+      ManagementClient management(
+          session.CreateManagementClient("Test", options, &managementEvents));
 
-    // Set the response status code to something other than an int - that will cause the response
-    // to be rejected by the management client.
-    managementEndpoint->SetStatusCode(500);
-    managementEndpoint->SetStatusCodeName("status-code");
-    managementEndpoint->SetStatusDescription("Bad Things Happened.");
-    mockServer.StartListening();
+      // Set the response status code to something other than an int - that will cause the response
+      // to be rejected by the management client.
+      mockServer.SetStatusCode(500);
+      mockServer.SetStatusCodeName("status-code");
+      mockServer.SetStatusDescription("Bad Things Happened.");
+      mockServer.StartListening();
 
-    auto openResult = management.Open();
-    ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
+      auto openResult = management.Open();
+      ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
 
-    AmqpMessage messageToSend;
-    messageToSend.SetBody(AmqpValue("Test"));
+      AmqpMessage messageToSend;
+      messageToSend.SetBody(AmqpValue("Test"));
 
-    auto response = management.ExecuteOperation("Test", "Type", "Locales", messageToSend);
-    EXPECT_EQ(response.Status, ManagementOperationStatus::Error);
-    EXPECT_EQ(response.StatusCode, 500);
-    EXPECT_EQ(
-        response.Error.Description,
-        "Message Delivery Rejected: Received message does not have a statusCode status code "
-        "key.");
-    EXPECT_TRUE(managementEvents.Error);
-    management.Close();
+      auto response = management.ExecuteOperation("Test", "Type", "Locales", messageToSend);
+      EXPECT_EQ(response.Status, ManagementOperationStatus::Error);
+      EXPECT_EQ(response.StatusCode, 500);
+      EXPECT_EQ(
+          response.Error.Description,
+          "Message Delivery Rejected: Received message does not have a statusCode status code "
+          "key.");
+      EXPECT_TRUE(managementEvents.Error);
+      management.Close();
 
-    mockServer.StopListening();
+      mockServer.StopListening();
+    }
   }
   TEST_F(TestManagement, ManagementRequestResponseBogusStatusName2)
   {
     // Send a response to the request with a bogus status code name.
-    MessageTests::AmqpServerMock mockServer;
-    auto managementEndpoint
-        = std::make_shared<ManagementServiceEndpoint>(MessageTests::MockServiceEndpointOptions{});
-    mockServer.AddServiceEndpoint(managementEndpoint);
+    {
+      ManagementReceiver mockServer;
 
-    ConnectionOptions connectionOptions;
-    connectionOptions.EnableTrace = true;
-    connectionOptions.Port = mockServer.GetPort();
-    Connection connection("localhost", nullptr, connectionOptions);
-    Session session{connection.CreateSession({})};
-    ManagementClientOptions options;
-    options.EnableTrace = true;
-    options.ExpectedStatusCodeKeyName = "status-code";
+      ConnectionOptions connectionOptions;
+      connectionOptions.EnableTrace = true;
+      connectionOptions.Port = mockServer.GetPort();
+      Connection connection("localhost", nullptr, connectionOptions);
+      Session session{connection.CreateSession({})};
+      ManagementClientOptions options;
+      options.EnableTrace = true;
+      options.ExpectedStatusCodeKeyName = "status-code";
 
-    ManagementClient management(session.CreateManagementClient("Test", options));
+      ManagementClient management(session.CreateManagementClient("Test", options));
 
-    // Set the response status code to something other than an int - that will cause the response
-    // to be rejected by the management client.
-    managementEndpoint->SetStatusCode(235);
-    managementEndpoint->SetStatusCodeName("status-code");
-    managementEndpoint->SetStatusDescription("Bad Things Happened..");
-    mockServer.StartListening();
+      // Set the response status code to something other than an int - that will cause the response
+      // to be rejected by the management client.
+      mockServer.SetStatusCode(235);
+      mockServer.SetStatusCodeName("status-code");
+      mockServer.SetStatusDescription("Bad Things Happened..");
+      mockServer.StartListening();
 
-    auto openResult = management.Open();
-    ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
+      auto openResult = management.Open();
+      ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
 
-    AmqpMessage messageToSend;
-    messageToSend.SetBody(AmqpValue("Test"));
+      AmqpMessage messageToSend;
+      messageToSend.SetBody(AmqpValue("Test"));
 
-    auto response = management.ExecuteOperation("Test", "Type", "Locales", messageToSend);
-    EXPECT_EQ(response.Status, ManagementOperationStatus::Ok);
-    EXPECT_EQ(response.StatusCode, 235);
-    EXPECT_EQ(response.Error.Description, "Bad Things Happened..");
-    management.Close();
+      auto response = management.ExecuteOperation("Test", "Type", "Locales", messageToSend);
+      EXPECT_EQ(response.Status, ManagementOperationStatus::Ok);
+      EXPECT_EQ(response.StatusCode, 235);
+      EXPECT_EQ(response.Error.Description, "Bad Things Happened..");
+      management.Close();
 
-    mockServer.StopListening();
+      mockServer.StopListening();
+    }
   }
 
   TEST_F(TestManagement, ManagementRequestResponseUnknownOperationName)
   {
     // Send a management request with an unknown operation name.
-    MessageTests::AmqpServerMock mockServer;
-    MessageTests::MockServiceEndpointOptions managementEndpointOptions;
-    auto managementEndpoint
-        = std::make_shared<ManagementServiceEndpoint>(managementEndpointOptions);
-    mockServer.AddServiceEndpoint(managementEndpoint);
+    {
+      ManagementReceiver mockServer;
+      mockServer.StartListening();
 
-    mockServer.StartListening();
+      ConnectionOptions connectionOptions;
+      connectionOptions.EnableTrace = true;
+      connectionOptions.Port = mockServer.GetPort();
+      Connection connection("localhost", nullptr, connectionOptions);
 
-    ConnectionOptions connectionOptions;
-    connectionOptions.EnableTrace = true;
-    connectionOptions.Port = mockServer.GetPort();
-    Connection connection("localhost", nullptr, connectionOptions);
+      Session session{connection.CreateSession({})};
 
-    Session session{connection.CreateSession({})};
+      ManagementClientOptions options;
+      options.EnableTrace = true;
+      ManagementClient management(session.CreateManagementClient("Test", options));
 
-    ManagementClientOptions options;
-    options.EnableTrace = true;
-    ManagementClient management(session.CreateManagementClient("Test", options));
+      auto openResult = management.Open();
+      ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
 
-    auto openResult = management.Open();
-    ASSERT_EQ(openResult, ManagementOpenStatus::Ok);
+      AmqpMessage messageToSend;
+      messageToSend.SetBody(AmqpValue("Test"));
 
-    AmqpMessage messageToSend;
-    messageToSend.SetBody(AmqpValue("Test"));
+      auto response = management.ExecuteOperation(
+          "Unknown Operation",
+          "Type",
+          "Locales",
+          messageToSend,
+          Azure::Core::Context::ApplicationContext.WithDeadline(
+              std::chrono::system_clock::now() + std::chrono::seconds(10)));
+      EXPECT_EQ(response.Status, ManagementOperationStatus::Error);
+      EXPECT_EQ(response.StatusCode, 500);
+      EXPECT_EQ(response.Error.Description, "Unknown Request operation");
+      management.Close();
 
-    auto response = management.ExecuteOperation(
-        "Unknown Operation",
-        "Type",
-        "Locales",
-        messageToSend,
-        Azure::Core::Context::ApplicationContext.WithDeadline(
-            std::chrono::system_clock::now() + std::chrono::seconds(10)));
-    EXPECT_EQ(response.Status, ManagementOperationStatus::Error);
-    EXPECT_EQ(response.StatusCode, 500);
-    EXPECT_EQ(response.Error.Description, "Unknown Request operation");
-    management.Close();
-
-    mockServer.StopListening();
+      mockServer.StopListening();
+    }
   }
 #endif // !defined(AZ_PLATFORM_MAC)
 }}}} // namespace Azure::Core::Amqp::Tests

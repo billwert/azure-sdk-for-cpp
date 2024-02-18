@@ -87,13 +87,7 @@ if ($DailyRelease) {
 
 
 Write-Host "./vcpkg.exe x-add-version $VcpkgPortName $addVersionAdditionalParameters"
-
-# https://github.com/microsoft/vcpkg/issues/36616
-if($addVersionAdditionalParameters -ne '') {
-    ./vcpkg.exe x-add-version $VcpkgPortName $addVersionAdditionalParameters
-} else {
-    ./vcpkg.exe x-add-version $VcpkgPortName
-}
+./vcpkg.exe x-add-version $VcpkgPortName $addVersionAdditionalParameters
 
 if ($LASTEXITCODE -ne 0) { 
     Write-Error "Failed to run vcpkg x-add-version $VcpkgPortName"

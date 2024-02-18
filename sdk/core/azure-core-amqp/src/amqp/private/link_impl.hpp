@@ -3,9 +3,7 @@
 
 #pragma once
 
-#include "../private/session_impl.hpp"
 #include "azure/core/amqp/internal/common/global_state.hpp"
-#include "azure/core/amqp/internal/link.hpp"
 #include "azure/core/amqp/internal/models/amqp_error.hpp"
 #include "azure/core/amqp/internal/models/message_source.hpp"
 #include "azure/core/amqp/internal/models/message_target.hpp"
@@ -31,16 +29,14 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
         std::string const& name,
         _internal::SessionRole role,
         Models::_internal::MessageSource const& source,
-        Models::_internal::MessageTarget const& target,
-        _detail::LinkEvents* events);
+        Models::_internal::MessageTarget const& target);
     LinkImpl(
         std::shared_ptr<_detail::SessionImpl> session,
         _internal::LinkEndpoint& linkEndpoint,
         std::string const& name,
         _internal::SessionRole role,
         Models::_internal::MessageSource const& source,
-        Models::_internal::MessageTarget const& target,
-        _detail::LinkEvents* events);
+        Models::_internal::MessageTarget const& target);
     ~LinkImpl() noexcept;
 
     LinkImpl(LinkImpl const&) = delete;
@@ -76,8 +72,6 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
 
     std::string GetName() const;
 
-    LINK_HANDLE GetUnderlyingLink() const { return m_link; };
-
     Models::_internal::MessageTarget const& GetTarget() const;
     Models::_internal::MessageSource const& GetSource() const;
 
@@ -93,31 +87,17 @@ namespace Azure { namespace Core { namespace Amqp { namespace _detail {
         bool close,
         std::string const& errorCondition,
         std::string const& errorDescription,
-        Models::AmqpValue const& info);
-
-    std::tuple<uint32_t, LinkDeliverySettleReason, Models::AmqpValue> Transfer(
-        std::vector<uint8_t> const& payload,
-        Azure::Core::Context const& context);
+        Models::AmqpValue& info);
 
   private:
     LINK_HANDLE m_link;
     std::shared_ptr<_detail::SessionImpl> m_session;
     Models::_internal::MessageSource m_source;
     Models::_internal::MessageTarget m_target;
-    Common::_internal::AsyncOperationQueue<uint32_t, LinkDeliverySettleReason, Models::AmqpValue>
-        m_transferCompleteQueue;
     OnLinkDetachEvent m_onLinkDetachEvent;
-    LinkEvents* m_eventHandler;
     ON_LINK_DETACH_EVENT_SUBSCRIPTION_HANDLE m_linkSubscriptionHandle{};
 
     static void OnLinkDetachEventFn(void* context, ERROR_HANDLE error);
-    static void OnLinkFlowOnFn(void* context);
-    static void OnLinkStateChangedFn(void* context, LINK_STATE newState, LINK_STATE oldState);
-    static AMQP_VALUE OnTransferReceivedFn(
-        void* context,
-        TRANSFER_HANDLE transfer,
-        uint32_t payload_size,
-        const unsigned char* payload_bytes);
 
     // Inherited via Pollable
     void Poll() override;

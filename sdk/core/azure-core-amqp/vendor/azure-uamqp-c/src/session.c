@@ -218,7 +218,7 @@ static void end_session_with_error(SESSION_INSTANCE* session_instance, const cha
 
 static int send_begin(SESSION_INSTANCE* session_instance)
 {
-    int result = 0;
+    int result;
     BEGIN_HANDLE begin = begin_create(session_instance->next_outgoing_id, session_instance->incoming_window, session_instance->outgoing_window);
 
     if (begin == NULL)
@@ -228,7 +228,6 @@ static int send_begin(SESSION_INSTANCE* session_instance)
     else
     {
         uint16_t remote_channel;
-        #if 0
         if (begin_set_handle_max(begin, session_instance->handle_max) != 0)
         {
             result = MU_FAILURE;
@@ -239,72 +238,28 @@ static int send_begin(SESSION_INSTANCE* session_instance)
         {
             result = MU_FAILURE;
         }
+        else
+        {
+            AMQP_VALUE begin_performative_value = amqpvalue_create_begin(begin);
+            if (begin_performative_value == NULL)
+            {
+                result = MU_FAILURE;
+            }
             else
             {
-                AMQP_VALUE begin_performative_value = amqpvalue_create_begin(begin);
-                if (begin_performative_value == NULL)
+                if (connection_encode_frame(session_instance->endpoint, begin_performative_value, NULL, 0, NULL, NULL) != 0)
                 {
                     result = MU_FAILURE;
                 }
                 else
                 {
-                    if (connection_encode_frame(
-                            session_instance->endpoint,
-                            begin_performative_value,
-                            NULL,
-                            0,
-                            NULL,
-                            NULL)
-                        != 0)
-                    {
-                      result = MU_FAILURE;
-                    }
-                    else
-                    {
-                      result = 0;
-                    }
+                    result = 0;
+                }
 
-                    amqpvalue_destroy(begin_performative_value);
-                }
-            }
-#else
-        if (begin_set_handle_max(begin, session_instance->handle_max) != 0)
-        {
-            result = MU_FAILURE;
-        }
-        else 
-        {
-            if ((connection_endpoint_get_incoming_channel(session_instance->endpoint, &remote_channel) == 0)
-                && (remote_channel != 0xffff))
-            {
-                if (begin_set_remote_channel(begin, remote_channel) != 0)
-                {
-                    result = MU_FAILURE;
-                }
-            }
-            if (result != MU_FAILURE)
-            {
-                AMQP_VALUE begin_performative_value = amqpvalue_create_begin(begin);
-                if (begin_performative_value == NULL)
-                {
-                    result = MU_FAILURE;
-                }
-                else
-                {
-                    if (connection_encode_frame(session_instance->endpoint, begin_performative_value, NULL, 0, NULL, NULL) != 0)
-                    {
-                        result = MU_FAILURE;
-                    }
-                    else
-                    {
-                        result = 0;
-                    }
-
-                    amqpvalue_destroy(begin_performative_value);
-                }
+                amqpvalue_destroy(begin_performative_value);
             }
         }
-#endif
+
         begin_destroy(begin);
     }
 
@@ -616,10 +571,7 @@ static void on_frame_received(void* context, AMQP_VALUE performative, uint32_t p
                     if (link_endpoint->link_endpoint_state != LINK_ENDPOINT_STATE_DETACHING)
                     {
                         link_endpoint->link_endpoint_state = LINK_ENDPOINT_STATE_DETACHING;
-                        if (link_endpoint->frame_received_callback)
-                        {
-                            link_endpoint->frame_received_callback(link_endpoint->callback_context, performative, payload_size, payload_bytes);
-                        }
+                        link_endpoint->frame_received_callback(link_endpoint->callback_context, performative, payload_size, payload_bytes);
                     }
                     else
                     {
@@ -922,8 +874,7 @@ int session_begin(SESSION_HANDLE session)
         }
         else
         {
-            // If we don't think the connection is already open, open the connection. We'll send the begin message as soon as the connection is open.
-            if (session_instance->is_underlying_connection_open == UNDERLYING_CONNECTION_NOT_OPEN)
+            if (!session_instance->is_underlying_connection_open)
             {
                 if (connection_open(session_instance->connection) != 0)
                 {
